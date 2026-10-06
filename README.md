@@ -40,8 +40,10 @@ cosign verify ghcr.io/deiflagellum/sigelith-cosigner@sha256:<digest> \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-Or rebuild it: `docker build --build-arg VERSION=<x.y.z> .` gives the same binary as the
-release (`go build -trimpath -ldflags="-s -w -buildid= -X main.version=<x.y.z>"`).
+Or rebuild it: `docker build --build-arg VERSION=<x.y.z> .` gives the same image binary as the
+release. The Lambda package is reproducible from a **git clone** of the tag (Go stamps the commit
+into the binary): `git checkout v<x.y.z>`, then the commands under *Build and test* with
+`-X main.version=<x.y.z>` give a ZIP with the SHA-256 listed in the release.
 
 ## Build and test
 
