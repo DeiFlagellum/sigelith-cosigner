@@ -1,0 +1,60 @@
+# Bramka jakosci: przy push/PR i jako warunek wydania (release.yml).
+name: ci
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Testy
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      # README obiecuje, ze obraz da sie odbudowac ze zrodel i porownac.
+      # Ta obietnica jest prawdziwa tylko wtedy, gdy budowa jest powtarzalna.
+      - name: Budowa jest powtarzalna
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          go build -trimpath -ldflags="-s -w -buildid=" -o /tmp/c1 .
+          go clean -cache
+          go build -trimpath -ldflags="-s -w -buildid=" -o /tmp/c2 .
+          a=$(sha256sum /tmp/c1 | cut -d' ' -f1); b=$(sha256sum /tmp/c2 | cut -d' ' -f1)
+          echo "budowa 1: $a"; echo "budowa 2: $b"
+          [ "$a" = "$b" ] || { echo "::error::budowa NIE jest powtarzalna"; exit 1; }
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Zbuduj obraz
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: sigelith-cosigner:ci
+
+      # Pusty katalog danych musi dac nowy klucz, a drugi start ten sam klucz —
+      # na tym stoi tozsamosc straznika.
+      - name: Test dymny obrazu
+        run: |
+          mkdir -p /tmp/data && sudo chown 65532:65532 /tmp/data
+          k1=$(docker run --rm -e COSIGNER_NAME=ci -v /tmp/data:/data sigelith-cosigner:ci pubkey)
+          k2=$(docker run --rm -e COSIGNER_NAME=ci -v /tmp/data:/data sigelith-cosigner:ci pubkey)
+          echo "klucz: $k1"
+          [ -n "$k1" ] && [ "$k1" = "$k2" ] || { echo "::error::klucz nie przetrwal restartu"; exit 1; }

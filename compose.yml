@@ -1,0 +1,45 @@
+# Uruchomienie straznika u operatora.
+#
+# Cala robota operatora: ustawic COSIGNER_NAME, zalozyc katalog danych
+# i uruchomic. Klucz wytworzy sie sam przy pierwszym starcie; jego klucz
+# publiczny jest w pierwszej linii dziennika kontenera (albo:
+# `docker compose run --rm sigelith-cosigner pubkey`). Ten klucz publiczny
+# przekazujesz Sigelith — wtedy Twoje podpisy zaczynaja sie liczyc.
+#
+# Pelny kontrakt: PROTOCOL.md. Obsluga: OPERATOR.md.
+
+services:
+  sigelith-cosigner:
+    # PO DIGESCIE, nie po tagu: tag mozna przestawic na inny obraz, digestu
+    # nie. Digest kazdego wydania jest w podsumowaniu przebiegu `release`
+    # (i w notatce wydania na GitHubie).
+    image: ghcr.io/deiflagellum/sigelith-cosigner@sha256:DIGEST-Z-NOTATKI-WYDANIA
+    container_name: sigelith-cosigner
+    restart: unless-stopped
+
+    environment:
+      # Stabilny identyfikator PODMIOTU: [a-z0-9-], do 32 znakow, nadawany raz
+      # i nigdy nie zmieniany (zmiana hostingu nie zmienia operatora).
+      COSIGNER_NAME: "zmien-mnie"
+      LOG_URL: "https://sigelith.org"
+
+    volumes:
+      # JEDYNE miejsce, w ktorym istnieje klucz prywatny (cosigner.key) — kopia
+      # tego katalogu to kopia klucza. Obok: stan (state.json).
+      #
+      # Katalog trzeba zalozyc PRZED pierwszym startem (kontener chodzi jako
+      # nonroot, uid 65532):
+      #     mkdir -p /srv/sigelith-cosigner && chown 65532:65532 /srv/sigelith-cosigner
+      # `:Z` nadaje etykiete SELinuxa; bez SELinuxa jest ignorowane.
+      - /srv/sigelith-cosigner:/data:Z
+
+    # Zadnych portow: straznik nie przyjmuje polaczen, tylko je nawiazuje.
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

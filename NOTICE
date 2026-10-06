@@ -1,0 +1,9 @@
+sigelith-cosigner
+Copyright 2026 DeiFlagellum
+
+This product includes software developed as part of the Sigelith project
+(https://sigelith.org).
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+The program uses only the Go standard library; it links no third-party code.
