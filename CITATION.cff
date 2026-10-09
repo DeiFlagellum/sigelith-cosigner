@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+type: software
+title: "Sigelith Cosigner"
+abstract: >-
+  Independent cosigner (witness) for the Sigelith public timestamp log. Every minute
+  it fetches the public log, checks the hash chain and the time of every new entry
+  against its own clock, recomputes the RFC 9162 Merkle tree itself and signs what it
+  saw (sigelith-cosign-v1). It has no inbound interface: it pulls the log and pushes
+  its signature back, so nobody can send it anything to sign.
+authors:
+  - family-names: Koch
+    given-names: Adam
+    orcid: "https://orcid.org/0009-0008-7882-7426"
+repository-code: "https://github.com/DeiFlagellum/sigelith-cosigner"
+url: "https://sigelith.org/spec/#cosigners"
+license: Apache-2.0
+keywords:
+  - transparency log
+  - witness
+  - cosigning
+  - timestamping
+  - Merkle tree
+  - Ed25519
+references:
+  - type: report
+    title: "Sigelith: Public Timestamps a Court Expert Can Verify Independently — Design, Trust Model and Evidentiary Limits"
+    authors:
+      - family-names: Koch
+        given-names: Adam
+        orcid: "https://orcid.org/0009-0008-7882-7426"
+    doi: 10.5281/zenodo.23265547
+    year: 2026
