@@ -40,6 +40,12 @@ type Config struct {
 	Heartbeat time.Duration // podpis bez nowych wpisow nie rzadziej niz co tyle (domyslnie 1 h)
 	MaxPages  int           // stron po 1000 wpisow na przebieg (domyslnie 50)
 	MaxOutbox int           // niedostarczonych podpisow w stanie (domyslnie 20)
+
+	// Klepsydra (hourglass.go, PROTOCOL.md 9)
+	HourglassOff  bool          // nie sprawdzaj odcinkow Klepsydry
+	HGMaxSegments int           // odcinkow sprawdzanych w jednym przebiegu (domyslnie 4)
+	HGMaxOutbox   int           // niedostarczonych potwierdzen; pelna kolejka wstrzymuje sprawdzanie (domyslnie 50)
+	HGBudget      time.Duration // po tylu sekundach przebiegu nie zaczyna nowego odcinka (domyslnie 12 s)
 }
 
 func (c Config) withDefaults() Config {
@@ -58,22 +64,34 @@ func (c Config) withDefaults() Config {
 	if c.MaxOutbox == 0 {
 		c.MaxOutbox = 20
 	}
+	if c.HGMaxSegments == 0 {
+		c.HGMaxSegments = 4
+	}
+	if c.HGMaxOutbox == 0 {
+		c.HGMaxOutbox = 50
+	}
+	if c.HGBudget == 0 {
+		c.HGBudget = 12 * time.Second
+	}
 	c.LogURL = strings.TrimRight(c.LogURL, "/")
 	return c
 }
 
 // State to wszystko, co straznik pamieta miedzy przebiegami.
 type State struct {
-	Key           string   `json:"key,omitempty"`  // wlasny klucz publiczny (wykrywa podmiane)
-	Size          uint64   `json:"size"`           // lisci w drzewie
-	Edges         []string `json:"edges"`          // krawedz drzewa (logtree.Tree.Edges)
-	LastSeq       int64    `json:"last_seq"`       // ostatni wpis
+	Key           string   `json:"key,omitempty"` // wlasny klucz publiczny (wykrywa podmiane)
+	Size          uint64   `json:"size"`          // lisci w drzewie
+	Edges         []string `json:"edges"`         // krawedz drzewa (logtree.Tree.Edges)
+	LastSeq       int64    `json:"last_seq"`      // ostatni wpis
 	LastChainHash string   `json:"last_chain_hash"`
 	LastUTC       string   `json:"last_utc"`
 	ObservedAt    string   `json:"observed_at"` // chwila TUZ PRZED ostatnim pelnym pobraniem
 	LastSigned    string   `json:"last_signed"`
 	Alarm         string   `json:"alarm,omitempty"`
 	Outbox        []string `json:"outbox"` // podpisy jeszcze nieprzyjete przez dziennik
+
+	Hourglass map[string]*HGClock `json:"hourglass,omitempty"` // zegary Klepsydry (hourglass.go)
+	HGOutbox  []string            `json:"hg_outbox,omitempty"` // potwierdzenia odcinkow jeszcze nieprzyjete
 }
 
 // Store przechowuje stan (plik u operatora, DynamoDB w AWS).
@@ -107,6 +125,11 @@ type Result struct {
 	Delivered  int    `json:"delivered"`
 	Pending    int    `json:"pending"`
 	Alarm      string `json:"alarm,omitempty"`
+
+	HGConfirmed int      `json:"hg_confirmed,omitempty"` // nowe potwierdzenia odcinkow Klepsydry
+	HGDelivered int      `json:"hg_delivered,omitempty"`
+	HGPending   int      `json:"hg_pending,omitempty"`
+	HGAlarms    []string `json:"hg_alarms,omitempty"` // zegary wstrzymane alarmem
 }
 
 type entry struct {
@@ -346,11 +369,12 @@ func (r *Runner) RunOnce(ctx context.Context) (Result, error) {
 		if alarmMsg != "" {
 			return r.alarm(ctx, st, version, r.now(), alarmMsg)
 		}
-		if _, err := r.Store.Save(ctx, st, version); err != nil {
+		if version, err = r.Store.Save(ctx, st, version); err != nil {
 			return res, fmt.Errorf("zapis stanu po wysylce: %w", err)
 		}
 	}
 	res.Pending = len(st.Outbox)
+	r.hourglass(ctx, cfg, st, &version, pub, keyB64, logURL.Host, tStart, &res)
 	return res, nil
 }
 

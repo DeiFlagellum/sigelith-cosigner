@@ -14,6 +14,12 @@ separate systems.
   it to sign.
 - **Fail-stop.** A broken chain, a backdated entry, an entry from the future or a log that
   disagrees with the signed tree stops the cosigner until its operator decides.
+- **Hourglass.** Since 1.1.0 it also checks every new segment of every
+  [Sigelith Hourglass](https://sigelith.org/hourglass/) clock itself (the proof of sequential
+  work, the chain from the genesis, the operator's signature), with its own implementation of
+  the specification in Go, and signs a confirmation (`sigelith-hourglass-confirm-v1`). A problem
+  with a clock stops the confirmations of that clock only. An operator of an Hourglass clock
+  publishes it with the same program (`clock-push`, under a separate key).
 - **Small.** Go standard library only, no third-party code. Image: distroless, ~16 MB,
   no shell. Reproducible build, images signed with cosign.
 

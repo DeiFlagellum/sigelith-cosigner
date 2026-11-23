@@ -59,7 +59,8 @@ user or role that has `kms:Sign` on it.
 | `KMS_KEY_ID` | the key ARN |
 | `STATE_TABLE` | `sigelith-cosigner-state` |
 
-Test it with an empty event `{}`: the result shows `new_entries`, `size`, `signed`.
+Test it with an empty event `{}`: the result shows `new_entries`, `size`, `signed` and, when
+an Hourglass segment was checked, `hg_confirmed`.
 
 ## 5. Schedule
 
@@ -71,3 +72,7 @@ function. The scheduler needs a role that may invoke the function (the console c
 An anomaly ends the invocation with an error. Create a CloudWatch alarm on the function's
 `Errors` metric (sum ≥ 1 in 5 minutes) with an SNS e-mail notification. Clear an alarm after
 you have decided, with the test event `{"clear_alarm": true}`.
+
+An Hourglass clock in alarm (PROTOCOL.md 9) also ends every invocation with an error, while
+log cosigning goes on. Clear it after you have decided, with the test event
+`{"clear_hourglass_alarm": "<clock>"}`.

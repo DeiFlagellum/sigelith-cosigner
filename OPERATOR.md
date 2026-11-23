@@ -71,4 +71,60 @@ digest in `compose.yml`, then `docker compose up -d`. The key and the state stay
 ## 6. Resources
 
 One HTTPS request per minute to the log (a few kB), one signature per new minute of entries
-or per hour. Memory ~10 MB, CPU negligible.
+or per hour. Memory ~10 MB, CPU negligible. Hourglass adds one request per minute for the list
+of clocks and, for every new segment (about one per two hours per clock), about 260 kB of proof
+and a fraction of a second of CPU to check it.
+
+## 7. Hourglass
+
+The cosigner also checks every new segment of every Hourglass clock in the log and signs a
+confirmation (PROTOCOL.md 9). Nothing to set up. To switch it off, set `HOURGLASS: "off"`.
+
+A problem with a clock is logged as `ALARM KLEPSYDRY (zegar <clock>)` and stops the
+confirmations of that clock only; your log signatures go on. Possible causes:
+
+- `NIE przechodzi sprawdzenia`, `rozwidlenie`, `krotszy ciag`, `zmienil sie genesis` - the
+  published clock changed or a segment is invalid: **report it** to Sigelith and keep
+  `state.json`;
+- `zmienil sie klucz operatora` - the clock's operator changed its key: clear the alarm once
+  the new key is confirmed to you through a channel you trust;
+- `pozniej niz zegar straznika` - usually your clock: fix it first.
+
+```bash
+docker compose run --rm sigelith-cosigner clear-hourglass-alarm <clock>
+docker compose restart sigelith-cosigner
+```
+
+## 8. Your own Hourglass clock
+
+If you run an Hourglass prover, publish its segments with the same image, as a second service
+next to the cosigner, with its own data directory (the clock key `clock.key` is created there
+at the first start and never leaves it):
+
+```yaml
+  sigelith-clock:
+    image: ghcr.io/deiflagellum/sigelith-cosigner@sha256:<the same digest>
+    container_name: sigelith-clock
+    restart: unless-stopped
+    command: ["clock-push"]
+    environment:
+      CLOCK_NAME: "<the clock name agreed with Sigelith>"
+      LOG_URL: "https://sigelith.org"
+    # the prover's directory is readable by its group only
+    group_add: ["<gid of the prover's group>"]
+    volumes:
+      - /srv/sigelith-clock:/data:Z                  # mkdir, chown 65532:65532 first
+      - <the prover's data directory>:/hourglass:ro,z
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+```
+
+```bash
+docker compose run --rm sigelith-clock clock-key        # the public key of your clock
+docker compose logs sigelith-clock | tail -1            # until pinned: which key and phi_0 to send
+```
+
+Send the key and `phi_0` to Sigelith through a channel you trust. Once both are pinned in the
+log, `clock-push` publishes the genesis and every segment in order. It never sends a record it
+could not check, and it stops on a fork (`ROZWIDLENIE`): report that to Sigelith.
